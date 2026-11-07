@@ -1,12 +1,14 @@
 package com.carrental.reservation.application;
 
+import com.carrental.CarRentalIntegrationTest;
 import com.carrental.fleet.domain.UnknownCarTypeException;
+import com.carrental.fleet.persistence.CarTypeRepository;
 import com.carrental.reservation.domain.IdempotencyKeyReusedException;
 import com.carrental.reservation.domain.NoCarAvailableException;
 import com.carrental.reservation.domain.Reservation;
+import com.carrental.reservation.domain.ReservationAlreadyStartedException;
 import com.carrental.reservation.domain.ReservationNotFoundException;
 import com.carrental.reservation.domain.ReservationPeriod;
-import com.carrental.reservation.domain.ReservationRequest;
 import com.carrental.reservation.domain.ReservationStatus;
 import com.carrental.reservation.persistence.ReservationRepository;
 import org.junit.jupiter.api.Nested;
@@ -14,29 +16,27 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.test.context.jdbc.Sql;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
+import static com.carrental.FixedClockConfiguration.NOW;
 import static com.carrental.reservation.application.RaceStarter.race;
-import static com.carrental.reservation.application.ReservationRequestFixtures.DAYS;
+import static com.carrental.reservation.application.ReservationRequestFixtures.DEFAULT_DAYS;
 import static com.carrental.reservation.application.ReservationRequestFixtures.TOMORROW;
 import static com.carrental.reservation.application.ReservationRequestFixtures.generateCustomerId;
 import static com.carrental.reservation.application.ReservationRequestFixtures.ofCarType;
 import static com.carrental.reservation.application.ReservationRequestFixtures.van;
 import static com.carrental.reservation.application.ReservationRequestFixtures.withCustomerId;
-import static com.carrental.reservation.application.ReservationRequestFixtures.withStart;
+import static com.carrental.reservation.application.ReservationRequestFixtures.withPeriod;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.springframework.test.context.jdbc.Sql.ExecutionPhase.AFTER_TEST_METHOD;
 
-@SpringBootTest
-@Sql(scripts = "/reset-reservations.sql", executionPhase = AFTER_TEST_METHOD)
+@CarRentalIntegrationTest
 class ReservationServiceIntegrationTest {
 
     private static final int RACING_CALLERS = 8;
@@ -46,6 +46,9 @@ class ReservationServiceIntegrationTest {
 
     @Autowired
     private ReservationRepository reservationRepository;
+
+    @Autowired
+    private CarTypeRepository carTypeRepository;
 
     @Autowired
     private JdbcClient jdbcClient;
@@ -65,7 +68,7 @@ class ReservationServiceIntegrationTest {
             // then
             Reservation storedReservation = reservationRepository.findById(reservation.id()).orElseThrow();
             assertThat(storedReservation.carType().name()).isEqualTo(carTypeName);
-            assertThat(storedReservation.period()).isEqualTo(ReservationPeriod.ofDays(TOMORROW, DAYS));
+            assertThat(storedReservation.period()).isEqualTo(ReservationPeriod.ofDays(TOMORROW, DEFAULT_DAYS));
             assertThat(storedReservation.status()).isEqualTo(ReservationStatus.ACTIVE);
         }
 
@@ -73,7 +76,7 @@ class ReservationServiceIntegrationTest {
         void givenOnlyVanReserved_whenReserveOverlappingVan_thenNoCarAvailableAndNothingStored() {
             // given
             reservationService.reserve(van());
-            ReservationRequest overlappingRequest = withStart(van(), TOMORROW.plus(Duration.ofDays(1)), 1);
+            ReservationRequest overlappingRequest = withPeriod(van(), TOMORROW.plus(Duration.ofDays(1)), 1);
 
             // when, then
             assertThatThrownBy(() -> reservationService.reserve(overlappingRequest))
@@ -82,10 +85,25 @@ class ReservationServiceIntegrationTest {
         }
 
         @Test
+        void givenVanReservedInsideRequestedPeriod_whenReservationRejected_thenFreeDaysStayFree() {
+            // given
+            reservationService.reserve(withPeriod(van(), TOMORROW.plus(Duration.ofDays(2)), 1));
+            ReservationRequest spanningRequest = withPeriod(van(), TOMORROW, 5);
+            assertThatThrownBy(() -> reservationService.reserve(spanningRequest))
+                    .isInstanceOf(NoCarAvailableException.class);
+
+            // when
+            Reservation reservationBeforeBookedDays = reservationService.reserve(withPeriod(van(), TOMORROW, 1));
+
+            // then
+            assertThat(reservationBeforeBookedDays.status()).isEqualTo(ReservationStatus.ACTIVE);
+        }
+
+        @Test
         void givenOnlyVanReserved_whenNextReservationStartsOnReturnDay_thenNoCarAvailable() {
             // given
             Reservation reservation = reservationService.reserve(van());
-            ReservationRequest returnDayRequest = withStart(van(), reservation.period().endsAt(), 1);
+            ReservationRequest returnDayRequest = withPeriod(van(), reservation.period().endsAt(), 1);
 
             // when, then
             assertThatThrownBy(() -> reservationService.reserve(returnDayRequest))
@@ -96,7 +114,7 @@ class ReservationServiceIntegrationTest {
         void givenOnlyVanReserved_whenNextReservationStartsDayAfterReturn_thenVanIsReserved() {
             // given
             Reservation reservation = reservationService.reserve(van());
-            ReservationRequest nextDayRequest = withStart(van(), reservation.period().endsAt().plus(Duration.ofDays(1)), 1);
+            ReservationRequest nextDayRequest = withPeriod(van(), reservation.period().endsAt().plus(Duration.ofDays(1)), 1);
 
             // when
             Reservation nextReservation = reservationService.reserve(nextDayRequest);
@@ -168,7 +186,7 @@ class ReservationServiceIntegrationTest {
             // given
             ReservationRequest request = van();
             reservationService.reserve(request);
-            ReservationRequest differentRequest = withStart(request, request.startsAt(), DAYS + 1);
+            ReservationRequest differentRequest = withPeriod(request, request.startsAt(), DEFAULT_DAYS + 1);
 
             // when, then
             assertThatThrownBy(() -> reservationService.reserve(differentRequest))
@@ -242,6 +260,34 @@ class ReservationServiceIntegrationTest {
             assertThatThrownBy(() -> reservationService.cancel(reservation.id(), generateCustomerId()))
                     .isInstanceOf(ReservationNotFoundException.class);
             assertThat(findStatus(reservation)).isEqualTo(ReservationStatus.ACTIVE);
+        }
+
+        @Test
+        void givenStartedReservation_whenOwnerCancels_thenRejectedAndReservationStaysActive() {
+            // given
+            Instant yesterday = NOW.minus(Duration.ofDays(1));
+            Reservation startedReservation = reservationRepository.saveAndFlush(Reservation.create(
+                    carTypeRepository.findByName("VAN").orElseThrow(), generateCustomerId(), "key-started",
+                    ReservationPeriod.ofDays(yesterday, 3)));
+
+            // when, then
+            assertThatThrownBy(() -> reservationService.cancel(startedReservation.id(), startedReservation.customerId()))
+                    .isInstanceOf(ReservationAlreadyStartedException.class);
+            assertThat(findStatus(startedReservation)).isEqualTo(ReservationStatus.ACTIVE);
+        }
+
+        @Test
+        void givenCancelledReservation_whenOwnerCancelsAgain_thenSucceeds() {
+            // given
+            ReservationRequest request = van();
+            Reservation reservation = reservationService.reserve(request);
+            reservationService.cancel(reservation.id(), request.customerId());
+
+            // when
+            reservationService.cancel(reservation.id(), request.customerId());
+
+            // then
+            assertThat(findStatus(reservation)).isEqualTo(ReservationStatus.CANCELLED);
         }
 
         @Test

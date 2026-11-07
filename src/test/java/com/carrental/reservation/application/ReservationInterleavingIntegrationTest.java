@@ -1,9 +1,9 @@
 package com.carrental.reservation.application;
 
+import com.carrental.CarRentalIntegrationTest;
 import com.carrental.reservation.domain.IdempotencyKeyReusedException;
 import com.carrental.reservation.domain.NoCarAvailableException;
 import com.carrental.reservation.domain.Reservation;
-import com.carrental.reservation.domain.ReservationRequest;
 import com.carrental.reservation.domain.ReservationStatus;
 import com.carrental.reservation.persistence.CarAvailabilityRepository;
 import com.carrental.reservation.persistence.ReservationRepository;
@@ -11,9 +11,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.stubbing.Answer;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
-import org.springframework.test.context.jdbc.Sql;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -27,11 +25,11 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
-import static com.carrental.reservation.application.ReservationRequestFixtures.DAYS;
+import static com.carrental.reservation.application.ReservationRequestFixtures.DEFAULT_DAYS;
 import static com.carrental.reservation.application.ReservationRequestFixtures.TOMORROW;
 import static com.carrental.reservation.application.ReservationRequestFixtures.van;
 import static com.carrental.reservation.application.ReservationRequestFixtures.withCarType;
-import static com.carrental.reservation.application.ReservationRequestFixtures.withStart;
+import static com.carrental.reservation.application.ReservationRequestFixtures.withPeriod;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
@@ -39,10 +37,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mockingDetails;
-import static org.springframework.test.context.jdbc.Sql.ExecutionPhase.AFTER_TEST_METHOD;
 
-@SpringBootTest
-@Sql(scripts = "/reset-reservations.sql", executionPhase = AFTER_TEST_METHOD)
+@CarRentalIntegrationTest
 class ReservationInterleavingIntegrationTest {
 
     private static final Duration WAIT_CHECK = Duration.ofMillis(500);
@@ -89,7 +85,7 @@ class ReservationInterleavingIntegrationTest {
     void givenVanDaysReservedButNotCommitted_whenAnotherCustomerReservesVanOnOtherDays_thenReservedWithoutWaiting() throws Exception {
         // given
         Future<Reservation> firstReservation = startPausedReservation(() -> reservationService.reserve(van()));
-        ReservationRequest laterRequest = withStart(van(), TOMORROW.plus(Duration.ofDays(10)), DAYS);
+        ReservationRequest laterRequest = withPeriod(van(), TOMORROW.plus(Duration.ofDays(10)), DEFAULT_DAYS);
 
         // when
         Reservation laterReservation = reservationService.reserve(laterRequest);
@@ -135,7 +131,7 @@ class ReservationInterleavingIntegrationTest {
     }
 
     @Test
-    void givenCallersInRepeatableReadTransactions_whenBothReserveTheOnlyVan_thenSecondFailsInsteadOfDoubleBooking() throws Exception {
+    void givenCallersInRepeatableReadTransactions_whenBothReserveTheOnlyVan_thenOnlyOneReservationIsStored() throws Exception {
         // given
         TransactionTemplate repeatableRead = new TransactionTemplate(transactionManager);
         repeatableRead.setIsolationLevel(TransactionDefinition.ISOLATION_REPEATABLE_READ);

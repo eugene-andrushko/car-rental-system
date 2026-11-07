@@ -23,6 +23,10 @@ public record ReservationPeriod(
         return new ReservationPeriod(startsAt, startsAt.plus(Duration.ofDays(days)));
     }
 
+    public boolean isStartedAt(Instant now) {
+        return !startsAt.isAfter(now);
+    }
+
     public OccupiedDays calculateOccupiedDays() {
         return new OccupiedDays(
                 LocalDate.ofInstant(startsAt, ZoneOffset.UTC),

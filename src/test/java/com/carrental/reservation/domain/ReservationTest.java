@@ -39,25 +39,25 @@ class ReservationTest {
     void givenReservation_whenCompareWithSameTypeAndPeriod_thenSameCarTypeAndPeriod() {
         // given
         Reservation reservation = Reservation.create(VAN, "customer-1", "key-1", PERIOD);
-        ReservationRequest request = new ReservationRequest("van", START, 3, "customer-1", "key-1");
+        ReservationPeriod samePeriod = ReservationPeriod.ofDays(START, 3);
 
         // when
-        boolean sameRequest = reservation.isForSameCarTypeAndPeriod(request);
+        boolean sameCarTypeAndPeriod = reservation.isForSameCarTypeAndPeriod("VAN", samePeriod);
 
         // then
-        assertThat(sameRequest).isTrue();
+        assertThat(sameCarTypeAndPeriod).isTrue();
     }
 
     @Test
     void givenReservation_whenCompareWithDifferentDays_thenDifferentPeriod() {
         // given
         Reservation reservation = Reservation.create(VAN, "customer-1", "key-1", PERIOD);
-        ReservationRequest request = new ReservationRequest("VAN", START, 4, "customer-1", "key-1");
+        ReservationPeriod longerPeriod = ReservationPeriod.ofDays(START, 4);
 
         // when
-        boolean sameRequest = reservation.isForSameCarTypeAndPeriod(request);
+        boolean sameCarTypeAndPeriod = reservation.isForSameCarTypeAndPeriod("VAN", longerPeriod);
 
         // then
-        assertThat(sameRequest).isFalse();
+        assertThat(sameCarTypeAndPeriod).isFalse();
     }
 }

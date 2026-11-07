@@ -1,11 +1,8 @@
 package com.carrental.reservation.domain;
 
-import org.springframework.boot.context.properties.ConfigurationProperties;
-
 import java.time.Duration;
 import java.time.Instant;
 
-@ConfigurationProperties(prefix = "reservation")
 public record ReservationRules(int maxDays, Duration bookingHorizon) {
 
     public ReservationPeriod validateAndCreatePeriod(Instant startsAt, int days, Instant now) {

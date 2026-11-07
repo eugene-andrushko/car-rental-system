@@ -1,6 +1,7 @@
-package com.carrental.reservation.domain;
+package com.carrental.reservation.application;
 
 import com.carrental.fleet.domain.CarType;
+import com.carrental.reservation.domain.ReservationPeriod;
 
 import java.time.Instant;
 

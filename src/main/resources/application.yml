@@ -15,3 +15,4 @@ spring:
 reservation:
   max-days: 30
   booking-horizon: 90d
+  calendar-cron: "0 0 0 * * *"

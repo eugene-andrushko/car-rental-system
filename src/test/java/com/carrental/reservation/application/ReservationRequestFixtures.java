@@ -1,15 +1,16 @@
 package com.carrental.reservation.application;
 
-import com.carrental.reservation.domain.ReservationRequest;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 
+import static com.carrental.FixedClockConfiguration.NOW;
+
 final class ReservationRequestFixtures {
 
-    static final Instant TOMORROW = Instant.now().plus(Duration.ofDays(1));
-    static final int DAYS = 3;
+    static final Instant TOMORROW = NOW.plus(Duration.ofDays(1));
+    static final int DEFAULT_DAYS = 3;
 
     private ReservationRequestFixtures() {
     }
@@ -19,14 +20,14 @@ final class ReservationRequestFixtures {
     }
 
     static ReservationRequest ofCarType(String carTypeName) {
-        return new ReservationRequest(carTypeName, TOMORROW, DAYS, generateCustomerId(), generateIdempotencyKey());
+        return new ReservationRequest(carTypeName, TOMORROW, DEFAULT_DAYS, generateCustomerId(), generateIdempotencyKey());
     }
 
     static ReservationRequest withCarType(ReservationRequest request, String carTypeName) {
         return new ReservationRequest(carTypeName, request.startsAt(), request.days(), request.customerId(), request.idempotencyKey());
     }
 
-    static ReservationRequest withStart(ReservationRequest request, Instant startsAt, int days) {
+    static ReservationRequest withPeriod(ReservationRequest request, Instant startsAt, int days) {
         return new ReservationRequest(request.carTypeName(), startsAt, days, request.customerId(), request.idempotencyKey());
     }
 

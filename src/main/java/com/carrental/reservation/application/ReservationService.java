@@ -7,15 +7,19 @@ import com.carrental.reservation.domain.IdempotencyKeyReusedException;
 import com.carrental.reservation.domain.NoCarAvailableException;
 import com.carrental.reservation.domain.OccupiedDays;
 import com.carrental.reservation.domain.Reservation;
+import com.carrental.reservation.domain.ReservationAlreadyStartedException;
 import com.carrental.reservation.domain.ReservationNotFoundException;
 import com.carrental.reservation.domain.ReservationPeriod;
-import com.carrental.reservation.domain.ReservationRequest;
 import com.carrental.reservation.domain.ReservationRules;
 import com.carrental.reservation.persistence.CarAvailabilityRepository;
 import com.carrental.reservation.persistence.ReservationRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.resilience.annotation.Retryable;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.util.Optional;
@@ -24,51 +28,53 @@ import java.util.UUID;
 @Service
 public class ReservationService {
 
+    private static final Logger log = LoggerFactory.getLogger(ReservationService.class);
+
     private final CarTypeRepository carTypeRepository;
     private final ReservationRepository reservationRepository;
     private final CarAvailabilityRepository carAvailabilityRepository;
     private final ReservationRules reservationRules;
-    private final TransactionTemplate transactionTemplate;
     private final Clock clock;
 
     ReservationService(CarTypeRepository carTypeRepository,
                        ReservationRepository reservationRepository,
                        CarAvailabilityRepository carAvailabilityRepository,
                        ReservationRules reservationRules,
-                       TransactionTemplate transactionTemplate,
                        Clock clock) {
         this.carTypeRepository = carTypeRepository;
         this.reservationRepository = reservationRepository;
         this.carAvailabilityRepository = carAvailabilityRepository;
         this.reservationRules = reservationRules;
-        this.transactionTemplate = transactionTemplate;
         this.clock = clock;
     }
 
+    @Retryable(includes = KeyTakenByConcurrentRequestException.class, maxRetries = 1, delay = 0)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Reservation reserve(ReservationRequest request) {
-        try {
-            return transactionTemplate.execute(_ -> findPreviousOrRejectReusedKey(request)
-                    .orElseGet(() -> createReservation(request)));
-        } catch (DataIntegrityViolationException keyTakenByConcurrentRequest) {
-            return transactionTemplate.execute(_ -> findPreviousOrRejectReusedKey(request)
-                    .orElseThrow(() -> keyTakenByConcurrentRequest));
-        }
+        return findPreviousOrRejectReusedKey(request).orElseGet(() -> createReservation(request));
     }
 
+    @Transactional
     public void cancel(UUID reservationId, String customerId) {
-        transactionTemplate.executeWithoutResult(_ -> {
-            if (reservationRepository.cancelIfActiveAndOwnedBy(reservationId, customerId) == 1) {
-                releaseCarOnEachDay(reservationRepository.findById(reservationId).orElseThrow());
-            } else if (!reservationRepository.existsByIdAndCustomerId(reservationId, customerId)) {
-                throw new ReservationNotFoundException(reservationId);
-            }
-        });
+        Reservation reservation = reservationRepository.findByIdAndCustomerId(reservationId, customerId)
+                .orElseThrow(() -> new ReservationNotFoundException(reservationId));
+        if (reservation.isCancelled()) {
+            return;
+        }
+        if (reservation.period().isStartedAt(clock.instant())) {
+            throw new ReservationAlreadyStartedException(reservationId);
+        }
+        if (reservationRepository.cancelIfActiveAndOwnedBy(reservationId, customerId) == 1) {
+            carAvailabilityRepository.releaseCarOnEachDay(
+                    reservation.carType().id(), reservation.period().calculateOccupiedDays());
+            log.info("Cancelled reservation {}", reservationId);
+        }
     }
 
     private Optional<Reservation> findPreviousOrRejectReusedKey(ReservationRequest request) {
         return reservationRepository.findByCustomerIdAndIdempotencyKey(request.customerId(), request.idempotencyKey())
                 .map(previousReservation -> {
-                    if (!previousReservation.isForSameCarTypeAndPeriod(request)) {
+                    if (!previousReservation.isForSameCarTypeAndPeriod(request.carTypeName(), request.toReservationPeriod())) {
                         throw new IdempotencyKeyReusedException(request.idempotencyKey());
                     }
                     return previousReservation;
@@ -79,21 +85,26 @@ public class ReservationService {
         CarType carType = carTypeRepository.findByName(request.carTypeName())
                 .orElseThrow(() -> new UnknownCarTypeException(request.carTypeName()));
         ReservationPeriod period = reservationRules.validateAndCreatePeriod(request.startsAt(), request.days(), clock.instant());
-        Reservation reservation = reservationRepository.saveAndFlush(
+        Reservation reservation = saveOrRejectTakenKey(
                 Reservation.create(carType, request.customerId(), request.idempotencyKey(), period));
-        reserveCarOnEachDay(carType, period);
+        reserveCarOnEachDayOrReject(carType, period);
+        log.info("Reserved {} {} from {} to {}", reservation.id(), carType.name(), period.startsAt(), period.endsAt());
         return reservation;
     }
 
-    private void reserveCarOnEachDay(CarType carType, ReservationPeriod period) {
+    private Reservation saveOrRejectTakenKey(Reservation reservation) {
+        try {
+            return reservationRepository.saveAndFlush(reservation);
+        } catch (DataIntegrityViolationException duplicateIdempotencyKey) {
+            log.info("Idempotency key {} was taken by a concurrent request, retrying", reservation.idempotencyKey());
+            throw new KeyTakenByConcurrentRequestException(duplicateIdempotencyKey);
+        }
+    }
+
+    private void reserveCarOnEachDayOrReject(CarType carType, ReservationPeriod period) {
         OccupiedDays occupiedDays = period.calculateOccupiedDays();
         if (carAvailabilityRepository.reserveCarOnEachDay(carType.id(), occupiedDays) < occupiedDays.countDays()) {
             throw new NoCarAvailableException(carType.name(), period);
         }
-    }
-
-    private void releaseCarOnEachDay(Reservation reservation) {
-        carAvailabilityRepository.releaseCarOnEachDay(
-                reservation.carType().id(), reservation.period().calculateOccupiedDays());
     }
 }

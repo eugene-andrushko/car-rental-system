@@ -64,8 +64,12 @@ public class Reservation {
         return new Reservation(carType, customerId, idempotencyKey, period);
     }
 
-    public boolean isForSameCarTypeAndPeriod(ReservationRequest request) {
-        return carType.name().equals(request.carTypeName()) && period.equals(request.toReservationPeriod());
+    public boolean isForSameCarTypeAndPeriod(String requestedCarTypeName, ReservationPeriod requestedPeriod) {
+        return carType.name().equals(requestedCarTypeName) && period.equals(requestedPeriod);
+    }
+
+    public boolean isCancelled() {
+        return status == ReservationStatus.CANCELLED;
     }
 
     public UUID id() {

@@ -1,9 +1,11 @@
 package com.carrental.reservation.application;
 
+import com.carrental.CarRentalIntegrationTest;
 import com.carrental.reservation.domain.ReservationRules;
+import static com.carrental.FixedClockConfiguration.NOW;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 import java.time.LocalDate;
@@ -13,7 +15,7 @@ import java.util.Map;
 import static java.util.stream.Collectors.toMap;
 import static org.assertj.core.api.Assertions.assertThat;
 
-@SpringBootTest
+@CarRentalIntegrationTest
 class CarAvailabilityCalendarIntegrationTest {
 
     @Autowired
@@ -26,13 +28,13 @@ class CarAvailabilityCalendarIntegrationTest {
     private JdbcClient jdbcClient;
 
     @Test
-    void givenApplicationStarted_whenCheckLastBookableDay_thenEveryCarTypeHasAllCarsFree() {
+    void givenApplicationStarted_whenCheckLastBookableDayOfTomorrow_thenEveryCarTypeHasAllCarsFree() {
         // given
-        LocalDate lastBookableDay = LocalDate.now(ZoneOffset.UTC)
-                .plusDays(reservationRules.bookingHorizon().toDays() + reservationRules.maxDays());
+        LocalDate lastBookableDayTomorrow = LocalDate.ofInstant(NOW, ZoneOffset.UTC)
+                .plusDays(reservationRules.bookingHorizon().toDays() + reservationRules.maxDays() + 1);
 
         // when
-        Map<String, Integer> freeCarsByTypeName = findFreeCarsByTypeName(lastBookableDay);
+        Map<String, Integer> freeCarsByTypeName = findFreeCarsByTypeName(lastBookableDayTomorrow);
 
         // then
         assertThat(freeCarsByTypeName).containsExactlyInAnyOrderEntriesOf(Map.of("SEDAN", 3, "SUV", 2, "VAN", 1));

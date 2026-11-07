@@ -12,7 +12,7 @@ public interface ReservationRepository extends JpaRepository<Reservation, UUID> 
 
     Optional<Reservation> findByCustomerIdAndIdempotencyKey(String customerId, String idempotencyKey);
 
-    boolean existsByIdAndCustomerId(UUID id, String customerId);
+    Optional<Reservation> findByIdAndCustomerId(UUID id, String customerId);
 
     @Modifying
     @Query("""

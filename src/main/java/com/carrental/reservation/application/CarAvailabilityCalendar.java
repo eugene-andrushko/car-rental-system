@@ -2,8 +2,9 @@ package com.carrental.reservation.application;
 
 import com.carrental.reservation.domain.ReservationRules;
 import com.carrental.reservation.persistence.CarAvailabilityRepository;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.event.EventListener;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -13,7 +14,9 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 
 @Component
-class CarAvailabilityCalendar {
+class CarAvailabilityCalendar implements SmartInitializingSingleton {
+
+    private static final Logger log = LoggerFactory.getLogger(CarAvailabilityCalendar.class);
 
     private final CarAvailabilityRepository carAvailabilityRepository;
     private final ReservationRules reservationRules;
@@ -25,13 +28,18 @@ class CarAvailabilityCalendar {
         this.clock = clock;
     }
 
-    @EventListener(ApplicationReadyEvent.class)
-    @Scheduled(cron = "0 0 0 * * *", zone = "UTC")
+    @Override
+    public void afterSingletonsInstantiated() {
+        openBookableDays();
+    }
+
+    @Scheduled(cron = "${reservation.calendar-cron}", zone = "UTC")
     void openBookableDays() {
         LocalDate today = LocalDate.now(clock);
-        LocalDate lastBookableDay = LocalDate.ofInstant(clock.instant()
+        LocalDate lastBookableDayTomorrow = LocalDate.ofInstant(clock.instant()
                 .plus(reservationRules.bookingHorizon())
-                .plus(Duration.ofDays(reservationRules.maxDays())), ZoneOffset.UTC);
-        today.datesUntil(lastBookableDay.plusDays(1)).forEach(carAvailabilityRepository::openDayIfMissing);
+                .plus(Duration.ofDays(reservationRules.maxDays() + 1)), ZoneOffset.UTC);
+        today.datesUntil(lastBookableDayTomorrow.plusDays(1)).forEach(carAvailabilityRepository::openDayIfMissing);
+        log.info("Opened bookable days from {} to {}", today, lastBookableDayTomorrow);
     }
 }

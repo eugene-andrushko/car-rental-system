@@ -1,6 +1,8 @@
 package com.carrental.reservation.persistence;
 
 import com.carrental.reservation.domain.OccupiedDays;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
@@ -10,6 +12,8 @@ import java.time.LocalDate;
 @Repository
 public class CarAvailabilityRepository {
 
+    private static final Logger log = LoggerFactory.getLogger(CarAvailabilityRepository.class);
+
     private final JdbcClient jdbcClient;
 
     CarAvailabilityRepository(JdbcClient jdbcClient) {
@@ -17,6 +21,7 @@ public class CarAvailabilityRepository {
     }
 
     public int reserveCarOnEachDay(long carTypeId, OccupiedDays occupiedDays) {
+        lockDaysInOrder(carTypeId, occupiedDays);
         return jdbcClient.sql("""
                         update car_availability
                         set free_cars = free_cars - 1
@@ -31,6 +36,7 @@ public class CarAvailabilityRepository {
     }
 
     public void releaseCarOnEachDay(long carTypeId, OccupiedDays occupiedDays) {
+        lockDaysInOrder(carTypeId, occupiedDays);
         jdbcClient.sql("""
                         update car_availability
                         set free_cars = free_cars + 1
@@ -57,7 +63,22 @@ public class CarAvailabilityRepository {
                     .param("calendarDay", calendarDay)
                     .update();
         } catch (DuplicateKeyException dayOpenedByAnotherInstance) {
-            return;
+            log.debug("Day {} was opened by another instance at the same moment", calendarDay, dayOpenedByAnotherInstance);
         }
+    }
+
+    private void lockDaysInOrder(long carTypeId, OccupiedDays occupiedDays) {
+        jdbcClient.sql("""
+                        select calendar_day from car_availability
+                        where car_type_id = :carTypeId
+                          and calendar_day between :firstDay and :lastDay
+                        order by calendar_day
+                        for update
+                        """)
+                .param("carTypeId", carTypeId)
+                .param("firstDay", occupiedDays.firstDay())
+                .param("lastDay", occupiedDays.lastDay())
+                .query(LocalDate.class)
+                .list();
     }
 }
