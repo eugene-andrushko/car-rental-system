@@ -6,14 +6,14 @@ import com.carrental.reservation.domain.ReservationStatus;
 import java.time.Instant;
 import java.util.UUID;
 
-record ReservationResponse(UUID id, String carType, Instant startsAt, Instant endsAt, ReservationStatus status) {
+record ReservationResponse(UUID id, String carType, Instant pickUpAt, Instant returnAt, ReservationStatus status) {
 
     static ReservationResponse from(Reservation reservation) {
         return new ReservationResponse(
                 reservation.id(),
                 reservation.carType().name(),
-                reservation.period().startsAt(),
-                reservation.period().endsAt(),
+                reservation.period().pickUpAt(),
+                reservation.period().returnAt(),
                 reservation.status());
     }
 }

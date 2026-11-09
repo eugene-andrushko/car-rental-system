@@ -18,7 +18,7 @@ public interface ReservationRepository extends JpaRepository<Reservation, UUID> 
     @Query("""
             update Reservation reservation
             set reservation.status = CANCELLED
-            where reservation.id = :id and reservation.customerId = :customerId and reservation.status = ACTIVE
+            where reservation.id = :id and reservation.customerId = :customerId and reservation.status = CONFIRMED
             """)
-    int cancelIfActiveAndOwnedBy(UUID id, String customerId);
+    int cancelIfConfirmedAndOwnedBy(UUID id, String customerId);
 }

@@ -9,7 +9,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
-import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 
@@ -17,6 +17,8 @@ import java.time.ZoneOffset;
 class CarAvailabilityCalendar implements SmartInitializingSingleton {
 
     private static final Logger log = LoggerFactory.getLogger(CarAvailabilityCalendar.class);
+    // Days opened beyond the latest return day, so a missed run, or runs up to a week apart, leave no bookable day closed.
+    private static final int SPARE_DAYS_OPENED = 7;
 
     private final CarAvailabilityRepository carAvailabilityRepository;
     private final ReservationRules reservationRules;
@@ -35,11 +37,10 @@ class CarAvailabilityCalendar implements SmartInitializingSingleton {
 
     @Scheduled(cron = "${reservation.calendar-cron}", zone = "UTC")
     void openBookableDays() {
-        LocalDate today = LocalDate.now(clock);
-        LocalDate lastBookableDayTomorrow = LocalDate.ofInstant(clock.instant()
-                .plus(reservationRules.bookingHorizon())
-                .plus(Duration.ofDays(reservationRules.maxDays() + 1)), ZoneOffset.UTC);
-        today.datesUntil(lastBookableDayTomorrow.plusDays(1)).forEach(carAvailabilityRepository::openDayIfMissing);
-        log.info("Opened bookable days from {} to {}", today, lastBookableDayTomorrow);
+        Instant now = clock.instant();
+        LocalDate today = LocalDate.ofInstant(now, ZoneOffset.UTC);
+        LocalDate lastDayToOpen = reservationRules.calculateLatestReturnDay(now).plusDays(SPARE_DAYS_OPENED);
+        today.datesUntil(lastDayToOpen.plusDays(1)).forEach(carAvailabilityRepository::openDayIfMissing);
+        log.info("Opened bookable days from {} to {}", today, lastDayToOpen);
     }
 }

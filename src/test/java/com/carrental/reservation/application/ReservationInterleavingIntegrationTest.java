@@ -1,7 +1,7 @@
 package com.carrental.reservation.application;
 
 import com.carrental.CarRentalIntegrationTest;
-import com.carrental.reservation.domain.IdempotencyKeyReusedException;
+import com.carrental.reservation.domain.KeyClaimedByConcurrentRequestException;
 import com.carrental.reservation.domain.NoCarAvailableException;
 import com.carrental.reservation.domain.Reservation;
 import com.carrental.reservation.domain.ReservationStatus;
@@ -41,7 +41,7 @@ import static org.mockito.Mockito.mockingDetails;
 @CarRentalIntegrationTest
 class ReservationInterleavingIntegrationTest {
 
-    private static final Duration WAIT_CHECK = Duration.ofMillis(500);
+    private static final Duration PROVEN_BLOCKED_AFTER = Duration.ofMillis(500);
 
     @Autowired
     private ReservationService reservationService;
@@ -76,7 +76,7 @@ class ReservationInterleavingIntegrationTest {
         // then
         assertKeepsWaiting(secondReservation);
         commitAllowed.countDown();
-        assertThat(firstReservation.get().status()).isEqualTo(ReservationStatus.ACTIVE);
+        assertThat(firstReservation.get().status()).isEqualTo(ReservationStatus.CONFIRMED);
         assertThatThrownBy(secondReservation::get).hasCauseInstanceOf(NoCarAvailableException.class);
         assertThat(reservationRepository.count()).isEqualTo(1);
     }
@@ -91,30 +91,31 @@ class ReservationInterleavingIntegrationTest {
         Reservation laterReservation = reservationService.reserve(laterRequest);
 
         // then
-        assertThat(laterReservation.status()).isEqualTo(ReservationStatus.ACTIVE);
+        assertThat(laterReservation.status()).isEqualTo(ReservationStatus.CONFIRMED);
         assertThat(firstReservation.isDone()).isFalse();
         commitAllowed.countDown();
-        assertThat(firstReservation.get().status()).isEqualTo(ReservationStatus.ACTIVE);
+        assertThat(firstReservation.get().status()).isEqualTo(ReservationStatus.CONFIRMED);
     }
 
     @Test
-    void givenVanDaysReservedButNotCommitted_whenSameRequestRetried_thenWaitsAndGetsSameReservation() throws Exception {
+    void givenVanDaysReservedButNotCommitted_whenSameRequestSentAgain_thenWaitsAndGetsConflictAndNextRetryGetsSameReservation() throws Exception {
         // given
         ReservationRequest request = van();
         Future<Reservation> firstReservation = startPausedReservation(() -> reservationService.reserve(request));
 
         // when
-        Future<Reservation> retriedReservation = executor.submit(() -> reservationService.reserve(request));
+        Future<Reservation> concurrentReservation = executor.submit(() -> reservationService.reserve(request));
 
         // then
-        assertKeepsWaiting(retriedReservation);
+        assertKeepsWaiting(concurrentReservation);
         commitAllowed.countDown();
-        assertThat(retriedReservation.get().id()).isEqualTo(firstReservation.get().id());
+        assertThatThrownBy(concurrentReservation::get).hasCauseInstanceOf(KeyClaimedByConcurrentRequestException.class);
+        assertThat(reservationService.reserve(request).id()).isEqualTo(firstReservation.get().id());
         assertThat(reservationRepository.count()).isEqualTo(1);
     }
 
     @Test
-    void givenVanDaysReservedButNotCommitted_whenSameKeyUsedForSedan_thenSedanRejected() throws Exception {
+    void givenVanDaysReservedButNotCommitted_whenSameKeyUsedForSedan_thenSedanGetsConflict() throws Exception {
         // given
         ReservationRequest vanRequest = van();
         Future<Reservation> vanReservation = startPausedReservation(() -> reservationService.reserve(vanRequest));
@@ -126,7 +127,7 @@ class ReservationInterleavingIntegrationTest {
         assertKeepsWaiting(sedanReservation);
         commitAllowed.countDown();
         assertThat(vanReservation.get().carType().name()).isEqualTo("VAN");
-        assertThatThrownBy(sedanReservation::get).hasCauseInstanceOf(IdempotencyKeyReusedException.class);
+        assertThatThrownBy(sedanReservation::get).hasCauseInstanceOf(KeyClaimedByConcurrentRequestException.class);
         assertThat(reservationRepository.count()).isEqualTo(1);
     }
 
@@ -145,7 +146,7 @@ class ReservationInterleavingIntegrationTest {
         // then
         assertKeepsWaiting(secondReservation);
         commitAllowed.countDown();
-        assertThat(firstReservation.get().status()).isEqualTo(ReservationStatus.ACTIVE);
+        assertThat(firstReservation.get().status()).isEqualTo(ReservationStatus.CONFIRMED);
         assertThatThrownBy(secondReservation::get).isInstanceOf(ExecutionException.class);
         assertThat(reservationRepository.count()).isEqualTo(1);
     }
@@ -164,10 +165,10 @@ class ReservationInterleavingIntegrationTest {
             daysReserved.countDown();
             commitAllowed.await(10, TimeUnit.SECONDS);
             return reservedDayCount;
-        }).doAnswer(realCall).when(carAvailabilityRepository).reserveCarOnEachDay(anyLong(), any());
+        }).doAnswer(realCall).when(carAvailabilityRepository).reserveCarOnEachAvailableDay(anyLong(), any());
     }
 
     private static void assertKeepsWaiting(Future<?> reservation) {
-        await().during(WAIT_CHECK).atMost(WAIT_CHECK.multipliedBy(2)).until(() -> !reservation.isDone());
+        await().during(PROVEN_BLOCKED_AFTER).atMost(PROVEN_BLOCKED_AFTER.multipliedBy(2)).until(() -> !reservation.isDone());
     }
 }

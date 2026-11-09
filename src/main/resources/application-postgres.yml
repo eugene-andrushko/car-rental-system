@@ -3,3 +3,5 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/carrental}
     username: ${DB_USERNAME:carrental}
     password: ${DB_PASSWORD:carrental}
+    hikari:
+      connection-init-sql: SET lock_timeout = '5s'

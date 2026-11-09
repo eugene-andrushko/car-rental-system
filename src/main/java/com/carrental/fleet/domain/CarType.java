@@ -27,7 +27,7 @@ public class CarType {
     }
 
     public CarType(String name, int carCount) {
-        this.name = normalizeName(name);
+        this.name = name;
         this.carCount = carCount;
     }
 

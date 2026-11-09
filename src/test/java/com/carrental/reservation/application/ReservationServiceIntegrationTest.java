@@ -4,9 +4,10 @@ import com.carrental.CarRentalIntegrationTest;
 import com.carrental.fleet.domain.UnknownCarTypeException;
 import com.carrental.fleet.persistence.CarTypeRepository;
 import com.carrental.reservation.domain.IdempotencyKeyReusedException;
+import com.carrental.reservation.domain.KeyClaimedByConcurrentRequestException;
 import com.carrental.reservation.domain.NoCarAvailableException;
 import com.carrental.reservation.domain.Reservation;
-import com.carrental.reservation.domain.ReservationAlreadyStartedException;
+import com.carrental.reservation.domain.PickUpTimePassedException;
 import com.carrental.reservation.domain.ReservationNotFoundException;
 import com.carrental.reservation.domain.ReservationPeriod;
 import com.carrental.reservation.domain.ReservationStatus;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 import java.time.Duration;
@@ -58,7 +60,7 @@ class ReservationServiceIntegrationTest {
 
         @ParameterizedTest
         @ValueSource(strings = {"SEDAN", "SUV", "VAN"})
-        void givenSeededCarType_whenReserve_thenActiveReservationIsStored(String carTypeName) {
+        void givenSeededCarType_whenReserve_thenConfirmedReservationIsStored(String carTypeName) {
             // given
             ReservationRequest request = ofCarType(carTypeName);
 
@@ -69,11 +71,11 @@ class ReservationServiceIntegrationTest {
             Reservation storedReservation = reservationRepository.findById(reservation.id()).orElseThrow();
             assertThat(storedReservation.carType().name()).isEqualTo(carTypeName);
             assertThat(storedReservation.period()).isEqualTo(ReservationPeriod.ofDays(TOMORROW, DEFAULT_DAYS));
-            assertThat(storedReservation.status()).isEqualTo(ReservationStatus.ACTIVE);
+            assertThat(storedReservation.status()).isEqualTo(ReservationStatus.CONFIRMED);
         }
 
         @Test
-        void givenOnlyVanReserved_whenReserveOverlappingVan_thenNoCarAvailableAndNothingStored() {
+        void givenTheOnlyVanReserved_whenReserveOverlappingVan_thenNoCarAvailableAndNothingStored() {
             // given
             reservationService.reserve(van());
             ReservationRequest overlappingRequest = withPeriod(van(), TOMORROW.plus(Duration.ofDays(1)), 1);
@@ -85,7 +87,7 @@ class ReservationServiceIntegrationTest {
         }
 
         @Test
-        void givenVanReservedInsideRequestedPeriod_whenReservationRejected_thenFreeDaysStayFree() {
+        void givenSpanningReservationRejected_whenReserveAvailableDayOfThatSpan_thenReserved() {
             // given
             reservationService.reserve(withPeriod(van(), TOMORROW.plus(Duration.ofDays(2)), 1));
             ReservationRequest spanningRequest = withPeriod(van(), TOMORROW, 5);
@@ -96,14 +98,14 @@ class ReservationServiceIntegrationTest {
             Reservation reservationBeforeBookedDays = reservationService.reserve(withPeriod(van(), TOMORROW, 1));
 
             // then
-            assertThat(reservationBeforeBookedDays.status()).isEqualTo(ReservationStatus.ACTIVE);
+            assertThat(reservationBeforeBookedDays.status()).isEqualTo(ReservationStatus.CONFIRMED);
         }
 
         @Test
-        void givenOnlyVanReserved_whenNextReservationStartsOnReturnDay_thenNoCarAvailable() {
+        void givenTheOnlyVanReserved_whenNextPickUpIsOnReturnDay_thenNoCarAvailable() {
             // given
             Reservation reservation = reservationService.reserve(van());
-            ReservationRequest returnDayRequest = withPeriod(van(), reservation.period().endsAt(), 1);
+            ReservationRequest returnDayRequest = withPeriod(van(), reservation.period().returnAt(), 1);
 
             // when, then
             assertThatThrownBy(() -> reservationService.reserve(returnDayRequest))
@@ -111,20 +113,20 @@ class ReservationServiceIntegrationTest {
         }
 
         @Test
-        void givenOnlyVanReserved_whenNextReservationStartsDayAfterReturn_thenVanIsReserved() {
+        void givenTheOnlyVanReserved_whenNextPickUpIsDayAfterReturn_thenVanIsReserved() {
             // given
             Reservation reservation = reservationService.reserve(van());
-            ReservationRequest nextDayRequest = withPeriod(van(), reservation.period().endsAt().plus(Duration.ofDays(1)), 1);
+            ReservationRequest nextDayRequest = withPeriod(van(), reservation.period().returnAt().plus(Duration.ofDays(1)), 1);
 
             // when
             Reservation nextReservation = reservationService.reserve(nextDayRequest);
 
             // then
-            assertThat(nextReservation.status()).isEqualTo(ReservationStatus.ACTIVE);
+            assertThat(nextReservation.status()).isEqualTo(ReservationStatus.CONFIRMED);
         }
 
         @Test
-        void givenOnlyVanReserved_whenReserveSuvForSamePeriod_thenSuvIsReserved() {
+        void givenTheOnlyVanReserved_whenReserveSuvForSamePeriod_thenSuvIsReserved() {
             // given
             reservationService.reserve(van());
 
@@ -143,6 +145,18 @@ class ReservationServiceIntegrationTest {
             // when, then
             assertThatThrownBy(() -> reservationService.reserve(request))
                     .isInstanceOf(UnknownCarTypeException.class);
+        }
+
+        @Test
+        void givenCustomerIdLongerThanColumn_whenReserve_thenIntegrityViolationIsNotTreatedAsClaimedKey() {
+            // given
+            ReservationRequest request = withCustomerId(van(), "c".repeat(101));
+
+            // when, then
+            assertThatThrownBy(() -> reservationService.reserve(request))
+                    .isInstanceOf(DataIntegrityViolationException.class)
+                    .isNotInstanceOf(KeyClaimedByConcurrentRequestException.class);
+            assertThat(reservationRepository.count()).isZero();
         }
 
         @Test
@@ -186,7 +200,7 @@ class ReservationServiceIntegrationTest {
             // given
             ReservationRequest request = van();
             reservationService.reserve(request);
-            ReservationRequest differentRequest = withPeriod(request, request.startsAt(), DEFAULT_DAYS + 1);
+            ReservationRequest differentRequest = withPeriod(request, request.pickUpAt(), DEFAULT_DAYS + 1);
 
             // when, then
             assertThatThrownBy(() -> reservationService.reserve(differentRequest))
@@ -194,16 +208,38 @@ class ReservationServiceIntegrationTest {
         }
 
         @Test
-        void givenSameRequest_whenRetriesRace_thenOneReservationReturnedToAll() {
+        void givenReservation_whenSameKeyUsedWithLatestPossiblePickUp_thenRejectedAsReusedKey() {
+            // given
+            ReservationRequest request = van();
+            reservationService.reserve(request);
+            ReservationRequest extremeRequest = withPeriod(request, Instant.MAX, Integer.MAX_VALUE);
+
+            // when, then
+            assertThatThrownBy(() -> reservationService.reserve(extremeRequest))
+                    .isInstanceOf(IdempotencyKeyReusedException.class);
+        }
+
+        @Test
+        void givenSameRequest_whenRetriesRace_thenOneReservationStoredAndOthersGetItOrConflict() {
             // given
             ReservationRequest request = van();
 
             // when
-            List<Reservation> reservations = race(RACING_CALLERS, () -> reservationService.reserve(request));
+            List<Optional<Reservation>> reservations = race(RACING_CALLERS, () -> reserveUnlessKeyClaimedConcurrently(request));
 
             // then
-            assertThat(reservations).extracting(Reservation::id).containsOnly(reservations.getFirst().id());
+            List<Reservation> returnedReservations = reservations.stream().flatMap(Optional::stream).toList();
+            assertThat(returnedReservations).isNotEmpty();
+            assertThat(returnedReservations).extracting(Reservation::id).containsOnly(returnedReservations.getFirst().id());
             assertThat(reservationRepository.count()).isEqualTo(1);
+        }
+
+        private Optional<Reservation> reserveUnlessKeyClaimedConcurrently(ReservationRequest request) {
+            try {
+                return Optional.of(reservationService.reserve(request));
+            } catch (KeyClaimedByConcurrentRequestException exception) {
+                return Optional.empty();
+            }
         }
 
         @Test
@@ -248,32 +284,32 @@ class ReservationServiceIntegrationTest {
             reservationService.cancel(reservation.id(), request.customerId());
 
             // then
-            assertThat(reservationService.reserve(van()).status()).isEqualTo(ReservationStatus.ACTIVE);
+            assertThat(reservationService.reserve(van()).status()).isEqualTo(ReservationStatus.CONFIRMED);
         }
 
         @Test
-        void givenReservation_whenAnotherCustomerCancels_thenRejectedAndReservationStaysActive() {
+        void givenReservation_whenAnotherCustomerCancels_thenRejectedAndReservationStaysConfirmed() {
             // given
             Reservation reservation = reservationService.reserve(van());
 
             // when, then
             assertThatThrownBy(() -> reservationService.cancel(reservation.id(), generateCustomerId()))
                     .isInstanceOf(ReservationNotFoundException.class);
-            assertThat(findStatus(reservation)).isEqualTo(ReservationStatus.ACTIVE);
+            assertThat(findStatus(reservation)).isEqualTo(ReservationStatus.CONFIRMED);
         }
 
         @Test
-        void givenStartedReservation_whenOwnerCancels_thenRejectedAndReservationStaysActive() {
+        void givenPickUpTimePassed_whenOwnerCancels_thenRejectedAndReservationStaysConfirmed() {
             // given
             Instant yesterday = NOW.minus(Duration.ofDays(1));
-            Reservation startedReservation = reservationRepository.saveAndFlush(Reservation.create(
-                    carTypeRepository.findByName("VAN").orElseThrow(), generateCustomerId(), "key-started",
+            Reservation reservationPastPickUp = reservationRepository.saveAndFlush(Reservation.create(
+                    carTypeRepository.findByName("VAN").orElseThrow(), generateCustomerId(), "key-past-pick-up",
                     ReservationPeriod.ofDays(yesterday, 3)));
 
             // when, then
-            assertThatThrownBy(() -> reservationService.cancel(startedReservation.id(), startedReservation.customerId()))
-                    .isInstanceOf(ReservationAlreadyStartedException.class);
-            assertThat(findStatus(startedReservation)).isEqualTo(ReservationStatus.ACTIVE);
+            assertThatThrownBy(() -> reservationService.cancel(reservationPastPickUp.id(), reservationPastPickUp.customerId()))
+                    .isInstanceOf(PickUpTimePassedException.class);
+            assertThat(findStatus(reservationPastPickUp)).isEqualTo(ReservationStatus.CONFIRMED);
         }
 
         @Test
@@ -291,7 +327,7 @@ class ReservationServiceIntegrationTest {
         }
 
         @Test
-        void givenVanReservation_whenOwnerCancelsRace_thenVanIsReleasedOnce() {
+        void givenVanReservation_whenOwnerCancelsConcurrently_thenVanIsReleasedOnce() {
             // given
             ReservationRequest request = van();
             Reservation reservation = reservationService.reserve(request);
@@ -304,16 +340,16 @@ class ReservationServiceIntegrationTest {
 
             // then
             assertThat(findStatus(reservation)).isEqualTo(ReservationStatus.CANCELLED);
-            assertThat(findFreeVans(reservation.period().calculateOccupiedDays().firstDay())).isEqualTo(1);
+            assertThat(findAvailableVans(reservation.period().calculateOccupiedDays().firstDay())).isEqualTo(1);
         }
 
         private ReservationStatus findStatus(Reservation reservation) {
             return reservationRepository.findById(reservation.id()).orElseThrow().status();
         }
 
-        private int findFreeVans(LocalDate calendarDay) {
+        private int findAvailableVans(LocalDate calendarDay) {
             return jdbcClient.sql("""
-                            select free_cars from car_availability
+                            select available_cars from car_availability
                             join car_type on car_type.id = car_availability.car_type_id
                             where car_type.name = 'VAN' and calendar_day = :calendarDay
                             """)

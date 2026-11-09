@@ -11,25 +11,37 @@ import java.time.temporal.ChronoUnit;
 
 @Embeddable
 public record ReservationPeriod(
-        @Column(name = "starts_at", nullable = false) Instant startsAt,
-        @Column(name = "ends_at", nullable = false) Instant endsAt) {
+        @Column(name = "pick_up_at", nullable = false) Instant pickUpAt,
+        @Column(name = "return_at", nullable = false) Instant returnAt) {
 
     public ReservationPeriod {
-        startsAt = startsAt.truncatedTo(ChronoUnit.MICROS);
-        endsAt = endsAt.truncatedTo(ChronoUnit.MICROS);
+        pickUpAt = toStoredPrecision(pickUpAt);
+        returnAt = toStoredPrecision(returnAt);
+        if (!pickUpAt.isBefore(returnAt)) {
+            throw new InvalidReservationException("Return must be after pick-up: " + pickUpAt + " to " + returnAt);
+        }
     }
 
-    public static ReservationPeriod ofDays(Instant startsAt, int days) {
-        return new ReservationPeriod(startsAt, startsAt.plus(Duration.ofDays(days)));
+    public static ReservationPeriod ofDays(Instant pickUpAt, int days) {
+        return new ReservationPeriod(pickUpAt, pickUpAt.plus(Duration.ofDays(days)));
     }
 
-    public boolean isStartedAt(Instant now) {
-        return !startsAt.isAfter(now);
+    public boolean isSamePeriodAs(Instant requestedPickUpAt, int requestedDays) {
+        return pickUpAt.equals(toStoredPrecision(requestedPickUpAt))
+                && Duration.between(pickUpAt, returnAt).equals(Duration.ofDays(requestedDays));
+    }
+
+    public boolean isPickUpTimeReachedBy(Instant now) {
+        return !pickUpAt.isAfter(now);
     }
 
     public OccupiedDays calculateOccupiedDays() {
         return new OccupiedDays(
-                LocalDate.ofInstant(startsAt, ZoneOffset.UTC),
-                LocalDate.ofInstant(endsAt.minusNanos(1), ZoneOffset.UTC));
+                LocalDate.ofInstant(pickUpAt, ZoneOffset.UTC),
+                LocalDate.ofInstant(returnAt.minusNanos(1), ZoneOffset.UTC));
+    }
+
+    private static Instant toStoredPrecision(Instant instant) {
+        return instant.truncatedTo(ChronoUnit.MICROS);
     }
 }

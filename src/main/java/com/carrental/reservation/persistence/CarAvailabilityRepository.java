@@ -20,18 +20,16 @@ public class CarAvailabilityRepository {
         this.jdbcClient = jdbcClient;
     }
 
-    public int reserveCarOnEachDay(long carTypeId, OccupiedDays occupiedDays) {
+    public int reserveCarOnEachAvailableDay(long carTypeId, OccupiedDays occupiedDays) {
         lockDaysInOrder(carTypeId, occupiedDays);
         return jdbcClient.sql("""
                         update car_availability
-                        set free_cars = free_cars - 1
+                        set available_cars = available_cars - 1
                         where car_type_id = :carTypeId
                           and calendar_day between :firstDay and :lastDay
-                          and free_cars > 0
+                          and available_cars > 0
                         """)
-                .param("carTypeId", carTypeId)
-                .param("firstDay", occupiedDays.firstDay())
-                .param("lastDay", occupiedDays.lastDay())
+                .paramSource(DaysOfCarType.of(carTypeId, occupiedDays))
                 .update();
     }
 
@@ -39,20 +37,18 @@ public class CarAvailabilityRepository {
         lockDaysInOrder(carTypeId, occupiedDays);
         jdbcClient.sql("""
                         update car_availability
-                        set free_cars = free_cars + 1
+                        set available_cars = available_cars + 1
                         where car_type_id = :carTypeId
                           and calendar_day between :firstDay and :lastDay
                         """)
-                .param("carTypeId", carTypeId)
-                .param("firstDay", occupiedDays.firstDay())
-                .param("lastDay", occupiedDays.lastDay())
+                .paramSource(DaysOfCarType.of(carTypeId, occupiedDays))
                 .update();
     }
 
     public void openDayIfMissing(LocalDate calendarDay) {
         try {
             jdbcClient.sql("""
-                            insert into car_availability (car_type_id, calendar_day, free_cars)
+                            insert into car_availability (car_type_id, calendar_day, available_cars)
                             select car_type.id, cast(:calendarDay as date), car_type.car_count
                             from car_type
                             where not exists (
@@ -75,10 +71,15 @@ public class CarAvailabilityRepository {
                         order by calendar_day
                         for update
                         """)
-                .param("carTypeId", carTypeId)
-                .param("firstDay", occupiedDays.firstDay())
-                .param("lastDay", occupiedDays.lastDay())
+                .paramSource(DaysOfCarType.of(carTypeId, occupiedDays))
                 .query(LocalDate.class)
                 .list();
+    }
+
+    private record DaysOfCarType(long carTypeId, LocalDate firstDay, LocalDate lastDay) {
+
+        static DaysOfCarType of(long carTypeId, OccupiedDays occupiedDays) {
+            return new DaysOfCarType(carTypeId, occupiedDays.firstDay(), occupiedDays.lastDay());
+        }
     }
 }

@@ -24,15 +24,15 @@ final class ReservationRequestFixtures {
     }
 
     static ReservationRequest withCarType(ReservationRequest request, String carTypeName) {
-        return new ReservationRequest(carTypeName, request.startsAt(), request.days(), request.customerId(), request.idempotencyKey());
+        return new ReservationRequest(carTypeName, request.pickUpAt(), request.days(), request.customerId(), request.idempotencyKey());
     }
 
-    static ReservationRequest withPeriod(ReservationRequest request, Instant startsAt, int days) {
-        return new ReservationRequest(request.carTypeName(), startsAt, days, request.customerId(), request.idempotencyKey());
+    static ReservationRequest withPeriod(ReservationRequest request, Instant pickUpAt, int days) {
+        return new ReservationRequest(request.carTypeName(), pickUpAt, days, request.customerId(), request.idempotencyKey());
     }
 
     static ReservationRequest withCustomerId(ReservationRequest request, String customerId) {
-        return new ReservationRequest(request.carTypeName(), request.startsAt(), request.days(), customerId, request.idempotencyKey());
+        return new ReservationRequest(request.carTypeName(), request.pickUpAt(), request.days(), customerId, request.idempotencyKey());
     }
 
     static String generateCustomerId() {

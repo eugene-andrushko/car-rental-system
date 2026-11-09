@@ -5,9 +5,10 @@ import com.carrental.fleet.domain.UnknownCarTypeException;
 import com.carrental.reservation.application.ReservationService;
 import com.carrental.reservation.domain.IdempotencyKeyReusedException;
 import com.carrental.reservation.domain.InvalidReservationException;
+import com.carrental.reservation.domain.KeyClaimedByConcurrentRequestException;
 import com.carrental.reservation.domain.NoCarAvailableException;
 import com.carrental.reservation.domain.Reservation;
-import com.carrental.reservation.domain.ReservationAlreadyStartedException;
+import com.carrental.reservation.domain.PickUpTimePassedException;
 import com.carrental.reservation.domain.ReservationNotFoundException;
 import com.carrental.reservation.domain.ReservationPeriod;
 import com.carrental.reservation.application.ReservationRequest;
@@ -18,6 +19,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.QueryTimeoutException;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -41,10 +43,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(ReservationController.class)
 class ReservationControllerTest {
 
-    private static final Instant STARTS_AT = Instant.parse("2030-01-01T10:00:00Z");
+    private static final Instant PICK_UP_AT = Instant.parse("2030-01-01T10:00:00Z");
     private static final UUID RESERVATION_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
     private static final String VALID_BODY = """
-            {"carType": "suv", "startsAt": "2030-01-01T10:00:00Z", "days": 3, "customerId": "customer-1"}
+            {"carType": "suv", "pickUpAt": "2030-01-01T10:00:00Z", "days": 3, "customerId": "customer-1"}
             """;
 
     @Autowired
@@ -56,8 +58,8 @@ class ReservationControllerTest {
     @Test
     void givenValidRequest_whenReserve_thenCreatedWithReservation() throws Exception {
         // given
-        ReservationRequest expectedRequest = new ReservationRequest("suv", STARTS_AT, 3, "customer-1", "key-1");
-        Reservation reservation = Reservation.create(new CarType("SUV", 2), "customer-1", "key-1", ReservationPeriod.ofDays(STARTS_AT, 3));
+        ReservationRequest expectedRequest = new ReservationRequest("suv", PICK_UP_AT, 3, "customer-1", "key-1");
+        Reservation reservation = Reservation.create(new CarType("SUV", 2), "customer-1", "key-1", ReservationPeriod.ofDays(PICK_UP_AT, 3));
         when(reservationService.reserve(expectedRequest)).thenReturn(reservation);
 
         // when
@@ -66,16 +68,16 @@ class ReservationControllerTest {
         // then
         response.andExpect(status().isCreated())
                 .andExpect(jsonPath("$.carType").value("SUV"))
-                .andExpect(jsonPath("$.startsAt").value("2030-01-01T10:00:00Z"))
-                .andExpect(jsonPath("$.endsAt").value("2030-01-04T10:00:00Z"))
-                .andExpect(jsonPath("$.status").value("ACTIVE"));
+                .andExpect(jsonPath("$.pickUpAt").value("2030-01-01T10:00:00Z"))
+                .andExpect(jsonPath("$.returnAt").value("2030-01-04T10:00:00Z"))
+                .andExpect(jsonPath("$.status").value("CONFIRMED"));
     }
 
     @Test
     void givenDaysNotPositive_whenReserve_thenBadRequest() throws Exception {
         // given
         String body = """
-                {"carType": "SUV", "startsAt": "2030-01-01T10:00:00Z", "days": 0, "customerId": "customer-1"}
+                {"carType": "SUV", "pickUpAt": "2030-01-01T10:00:00Z", "days": 0, "customerId": "customer-1"}
                 """;
 
         // when
@@ -96,6 +98,45 @@ class ReservationControllerTest {
         response.andExpect(status().isBadRequest());
     }
 
+    @Test
+    void givenCustomerIdLongerThanStored_whenReserve_thenBadRequest() throws Exception {
+        // given
+        String body = """
+                {"carType": "SUV", "pickUpAt": "2030-01-01T10:00:00Z", "days": 3, "customerId": "%s"}
+                """.formatted("c".repeat(101));
+
+        // when
+        ResultActions response = postReservation("key-1", body);
+
+        // then
+        response.andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void givenIdempotencyKeyLongerThanStored_whenReserve_thenBadRequest() throws Exception {
+        // given
+        String idempotencyKey = "k".repeat(101);
+
+        // when
+        ResultActions response = postReservation(idempotencyKey, VALID_BODY);
+
+        // then
+        response.andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void givenUnexpectedFailure_whenReserve_thenInternalServerErrorWithGenericMessage() throws Exception {
+        // given
+        when(reservationService.reserve(any())).thenThrow(new IllegalStateException("database exploded"));
+
+        // when
+        ResultActions response = postReservation("key-1", VALID_BODY);
+
+        // then
+        response.andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.detail").value("Something went wrong, please try again"));
+    }
+
     @ParameterizedTest
     @MethodSource("reservationRejections")
     void givenServiceRejectsReservation_whenReserve_thenMatchingStatus(RuntimeException rejection, int expectedStatus) throws Exception {
@@ -109,10 +150,11 @@ class ReservationControllerTest {
         response.andExpect(status().is(expectedStatus));
     }
 
-    @Test
-    void givenLockFailure_whenReserve_thenServiceUnavailableWithRetryAfter() throws Exception {
+    @ParameterizedTest
+    @MethodSource("temporaryDatabaseFailures")
+    void givenTemporaryDatabaseFailure_whenReserve_thenServiceUnavailableWithRetryAfter(RuntimeException failure) throws Exception {
         // given
-        when(reservationService.reserve(any())).thenThrow(new CannotAcquireLockException("lock timeout"));
+        when(reservationService.reserve(any())).thenThrow(failure);
 
         // when
         ResultActions response = postReservation("key-1", VALID_BODY);
@@ -153,15 +195,22 @@ class ReservationControllerTest {
 
     private static Stream<Arguments> reservationRejections() {
         return Stream.of(
-                Arguments.of(new InvalidReservationException("start in the past"), 400),
+                Arguments.of(new InvalidReservationException("pick-up in the past"), 400),
                 Arguments.of(new UnknownCarTypeException("TRUCK"), 404),
-                Arguments.of(new NoCarAvailableException("SUV", ReservationPeriod.ofDays(STARTS_AT, 3)), 409),
+                Arguments.of(new NoCarAvailableException("SUV", ReservationPeriod.ofDays(PICK_UP_AT, 3)), 409),
+                Arguments.of(new KeyClaimedByConcurrentRequestException("key-1", null), 409),
                 Arguments.of(new IdempotencyKeyReusedException("key-1"), 422));
+    }
+
+    private static Stream<RuntimeException> temporaryDatabaseFailures() {
+        return Stream.of(
+                new CannotAcquireLockException("lock timeout on PostgreSQL"),
+                new QueryTimeoutException("lock timeout on H2"));
     }
 
     private static Stream<Arguments> cancelRejections() {
         return Stream.of(
                 Arguments.of(new ReservationNotFoundException(RESERVATION_ID), 404),
-                Arguments.of(new ReservationAlreadyStartedException(RESERVATION_ID), 409));
+                Arguments.of(new PickUpTimePassedException(RESERVATION_ID), 409));
     }
 }

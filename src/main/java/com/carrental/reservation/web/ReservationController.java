@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.http.HttpStatus;
+import jakarta.validation.constraints.Size;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -37,23 +38,23 @@ class ReservationController {
             @ApiResponse(responseCode = "201", description = "Reserved, or the same request retried with the same Idempotency-Key"),
             @ApiResponse(responseCode = "400", description = "Invalid body, missing Idempotency-Key, or period outside the rules"),
             @ApiResponse(responseCode = "404", description = "Unknown car type"),
-            @ApiResponse(responseCode = "409", description = "No car of that type is free for the whole period"),
+            @ApiResponse(responseCode = "409", description = "No car of that type is available for the whole period, or another request with the same Idempotency-Key was processed at the same time"),
             @ApiResponse(responseCode = "422", description = "Idempotency-Key already used for a different request"),
             @ApiResponse(responseCode = "503", description = "Temporarily busy; retry with the same Idempotency-Key")})
     ReservationResponse reserve(
             @Parameter(description = "Unique per customer; a retry with the same key returns the original reservation")
-            @RequestHeader("Idempotency-Key") @NotBlank String idempotencyKey,
+            @RequestHeader("Idempotency-Key") @NotBlank @Size(max = 100) String idempotencyKey,
             @Valid @RequestBody CreateReservationBody body) {
         return ReservationResponse.from(reservationService.reserve(body.toReservationRequest(idempotencyKey)));
     }
 
     @DeleteMapping("/{reservationId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @Operation(summary = "Cancel a reservation before it starts", responses = {
+    @Operation(summary = "Cancel a reservation before its pick-up time", responses = {
             @ApiResponse(responseCode = "204", description = "Cancelled, or already cancelled"),
             @ApiResponse(responseCode = "404", description = "Reservation not found, or owned by another customer"),
-            @ApiResponse(responseCode = "409", description = "The reservation has already started")})
-    void cancel(@PathVariable UUID reservationId, @RequestParam @NotBlank String customerId) {
+            @ApiResponse(responseCode = "409", description = "The pick-up time has passed")})
+    void cancel(@PathVariable UUID reservationId, @RequestParam @NotBlank @Size(max = 100) String customerId) {
         reservationService.cancel(reservationId, customerId);
     }
 }

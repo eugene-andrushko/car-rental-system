@@ -15,6 +15,7 @@ import jakarta.persistence.Table;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @Entity
@@ -51,7 +52,7 @@ public class Reservation {
         this.customerId = customerId;
         this.idempotencyKey = idempotencyKey;
         this.period = period;
-        this.status = ReservationStatus.ACTIVE;
+        this.status = ReservationStatus.CONFIRMED;
     }
 
     public static Reservation create(CarType carType, String customerId, String idempotencyKey, ReservationPeriod period) {
@@ -64,8 +65,8 @@ public class Reservation {
         return new Reservation(carType, customerId, idempotencyKey, period);
     }
 
-    public boolean isForSameCarTypeAndPeriod(String requestedCarTypeName, ReservationPeriod requestedPeriod) {
-        return carType.name().equals(requestedCarTypeName) && period.equals(requestedPeriod);
+    public boolean isForSameCarTypeAndPeriod(String requestedCarTypeName, Instant requestedPickUpAt, int requestedDays) {
+        return carType.name().equals(requestedCarTypeName) && period.isSamePeriodAs(requestedPickUpAt, requestedDays);
     }
 
     public boolean isCancelled() {

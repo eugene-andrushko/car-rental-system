@@ -13,9 +13,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ReservationTest {
 
-    private static final Instant START = Instant.parse("2030-01-01T10:00:00Z");
+    private static final Instant PICK_UP_AT = Instant.parse("2030-01-01T10:00:00Z");
     private static final CarType VAN = new CarType("VAN", 1);
-    private static final ReservationPeriod PERIOD = ReservationPeriod.ofDays(START, 3);
+    private static final ReservationPeriod PERIOD = ReservationPeriod.ofDays(PICK_UP_AT, 3);
 
     @ParameterizedTest
     @NullAndEmptySource
@@ -39,10 +39,9 @@ class ReservationTest {
     void givenReservation_whenCompareWithSameTypeAndPeriod_thenSameCarTypeAndPeriod() {
         // given
         Reservation reservation = Reservation.create(VAN, "customer-1", "key-1", PERIOD);
-        ReservationPeriod samePeriod = ReservationPeriod.ofDays(START, 3);
 
         // when
-        boolean sameCarTypeAndPeriod = reservation.isForSameCarTypeAndPeriod("VAN", samePeriod);
+        boolean sameCarTypeAndPeriod = reservation.isForSameCarTypeAndPeriod("VAN", PICK_UP_AT, 3);
 
         // then
         assertThat(sameCarTypeAndPeriod).isTrue();
@@ -52,10 +51,9 @@ class ReservationTest {
     void givenReservation_whenCompareWithDifferentDays_thenDifferentPeriod() {
         // given
         Reservation reservation = Reservation.create(VAN, "customer-1", "key-1", PERIOD);
-        ReservationPeriod longerPeriod = ReservationPeriod.ofDays(START, 4);
 
         // when
-        boolean sameCarTypeAndPeriod = reservation.isForSameCarTypeAndPeriod("VAN", longerPeriod);
+        boolean sameCarTypeAndPeriod = reservation.isForSameCarTypeAndPeriod("VAN", PICK_UP_AT, 4);
 
         // then
         assertThat(sameCarTypeAndPeriod).isFalse();

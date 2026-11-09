@@ -1,6 +1,6 @@
 package com.carrental.reservation.domain;
 
 public enum ReservationStatus {
-    ACTIVE,
+    CONFIRMED,
     CANCELLED
 }
