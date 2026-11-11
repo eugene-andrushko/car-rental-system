@@ -1,4 +1,7 @@
 delete from reservation;
 
+update car_type
+set car_count = case name when 'SEDAN' then 3 when 'SUV' then 2 when 'VAN' then 1 end;
+
 update car_availability
-set available_cars = (select car_type.car_count from car_type where car_type.id = car_availability.car_type_id);
+set reserved_cars = 0;

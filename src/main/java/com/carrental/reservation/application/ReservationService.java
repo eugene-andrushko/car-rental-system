@@ -82,14 +82,14 @@ public class ReservationService {
         CarType carType = carTypeRepository.findByName(request.carTypeName())
                 .orElseThrow(() -> new UnknownCarTypeException(request.carTypeName()));
         ReservationPeriod period = reservationRules.validateAndCreatePeriod(request.pickUpAt(), request.days(), clock.instant());
-        Reservation reservation = saveAndClaimIdempotencyKey(
+        Reservation reservation = saveReservationOrReject(
                 Reservation.create(carType, request.customerId(), request.idempotencyKey(), period));
         reserveCarOnEachDayOrReject(carType, period);
         log.info("Reserved {} {} from {} to {}", reservation.id(), carType.name(), period.pickUpAt(), period.returnAt());
         return reservation;
     }
 
-    private Reservation saveAndClaimIdempotencyKey(Reservation reservation) {
+    private Reservation saveReservationOrReject(Reservation reservation) {
         try {
             return reservationRepository.saveAndFlush(reservation);
         } catch (DataIntegrityViolationException integrityViolation) {

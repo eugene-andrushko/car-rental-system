@@ -88,7 +88,7 @@ class ReservationApiIntegrationTest {
     private void holdVanDayLock(CountDownLatch dayLocked, CountDownLatch lockReleaseAllowed) {
         new TransactionTemplate(transactionManager).executeWithoutResult(_ -> {
             jdbcClient.sql("""
-                            select available_cars from car_availability
+                            select reserved_cars from car_availability
                             where car_type_id = (select id from car_type where name = 'VAN')
                               and calendar_day = :calendarDay
                             for update

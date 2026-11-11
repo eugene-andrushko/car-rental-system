@@ -40,7 +40,7 @@ class CarAvailabilityCalendar implements SmartInitializingSingleton {
         Instant now = clock.instant();
         LocalDate today = LocalDate.ofInstant(now, ZoneOffset.UTC);
         LocalDate lastDayToOpen = reservationRules.calculateLatestReturnDay(now).plusDays(SPARE_DAYS_OPENED);
-        today.datesUntil(lastDayToOpen.plusDays(1)).forEach(carAvailabilityRepository::openDayIfMissing);
+        today.datesUntil(lastDayToOpen.plusDays(1)).forEach(carAvailabilityRepository::openDayForEveryCarType);
         log.info("Opened bookable days from {} to {}", today, lastDayToOpen);
     }
 }

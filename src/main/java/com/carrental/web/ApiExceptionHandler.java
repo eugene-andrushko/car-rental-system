@@ -1,5 +1,13 @@
 package com.carrental.web;
 
+import com.carrental.fleet.domain.UnknownCarTypeException;
+import com.carrental.reservation.domain.CarsAlreadyReservedException;
+import com.carrental.reservation.domain.IdempotencyKeyReusedException;
+import com.carrental.reservation.domain.InvalidReservationException;
+import com.carrental.reservation.domain.KeyClaimedByConcurrentRequestException;
+import com.carrental.reservation.domain.NoCarAvailableException;
+import com.carrental.reservation.domain.PickUpTimePassedException;
+import com.carrental.reservation.domain.ReservationNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.TransientDataAccessException;
@@ -16,6 +24,27 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
     private static final String RETRY_AFTER_SECONDS = "1";
+
+    @ExceptionHandler(InvalidReservationException.class)
+    ProblemDetail handleInvalidReservation(InvalidReservationException exception) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, exception.getMessage());
+    }
+
+    @ExceptionHandler({UnknownCarTypeException.class, ReservationNotFoundException.class})
+    ProblemDetail handleNotFound(RuntimeException exception) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, exception.getMessage());
+    }
+
+    @ExceptionHandler({NoCarAvailableException.class, PickUpTimePassedException.class, KeyClaimedByConcurrentRequestException.class,
+            CarsAlreadyReservedException.class})
+    ProblemDetail handleConflict(RuntimeException exception) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, exception.getMessage());
+    }
+
+    @ExceptionHandler(IdempotencyKeyReusedException.class)
+    ProblemDetail handleIdempotencyKeyReused(IdempotencyKeyReusedException exception) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, exception.getMessage());
+    }
 
     @ExceptionHandler(TransientDataAccessException.class)
     ResponseEntity<ProblemDetail> handleTemporaryDatabaseFailure(TransientDataAccessException exception) {

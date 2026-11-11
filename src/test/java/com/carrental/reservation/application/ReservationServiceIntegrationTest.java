@@ -349,8 +349,8 @@ class ReservationServiceIntegrationTest {
 
         private int findAvailableVans(LocalDate calendarDay) {
             return jdbcClient.sql("""
-                            select available_cars from car_availability
-                            join car_type on car_type.id = car_availability.car_type_id
+                            select car_type.car_count - car_availability.reserved_cars
+                            from car_availability join car_type on car_type.id = car_availability.car_type_id
                             where car_type.name = 'VAN' and calendar_day = :calendarDay
                             """)
                     .param("calendarDay", calendarDay)

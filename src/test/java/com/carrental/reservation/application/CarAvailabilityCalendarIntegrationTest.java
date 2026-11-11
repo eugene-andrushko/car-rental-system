@@ -47,7 +47,7 @@ class CarAvailabilityCalendarIntegrationTest {
 
     private Map<String, Integer> findAvailableCarsByTypeName(LocalDate calendarDay) {
         return jdbcClient.sql("""
-                        select car_type.name, car_availability.available_cars
+                        select car_type.name, car_type.car_count - car_availability.reserved_cars
                         from car_availability join car_type on car_type.id = car_availability.car_type_id
                         where car_availability.calendar_day = :calendarDay
                         """)

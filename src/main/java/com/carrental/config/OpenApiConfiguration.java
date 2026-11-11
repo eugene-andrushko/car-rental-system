@@ -12,7 +12,7 @@ class OpenApiConfiguration {
     OpenAPI carRentalOpenApi() {
         return new OpenAPI().info(new Info()
                 .title("Car Rental API")
-                .description("Reserve a car of a given type for a number of days, and cancel the reservation")
+                .description("Reserve a car of a given type for a number of days, cancel the reservation, and change how many cars of a type the fleet has")
                 .version("1.0"));
     }
 }

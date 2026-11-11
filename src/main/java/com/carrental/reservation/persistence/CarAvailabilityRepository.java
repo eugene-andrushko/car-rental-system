@@ -1,18 +1,14 @@
 package com.carrental.reservation.persistence;
 
 import com.carrental.reservation.domain.OccupiedDays;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 
 @Repository
 public class CarAvailabilityRepository {
-
-    private static final Logger log = LoggerFactory.getLogger(CarAvailabilityRepository.class);
 
     private final JdbcClient jdbcClient;
 
@@ -24,10 +20,10 @@ public class CarAvailabilityRepository {
         lockDaysInOrder(carTypeId, occupiedDays);
         return jdbcClient.sql("""
                         update car_availability
-                        set available_cars = available_cars - 1
+                        set reserved_cars = reserved_cars + 1
                         where car_type_id = :carTypeId
                           and calendar_day between :firstDay and :lastDay
-                          and available_cars > 0
+                          and reserved_cars < (select car_count from car_type where car_type.id = car_availability.car_type_id)
                         """)
                 .paramSource(DaysOfCarType.of(carTypeId, occupiedDays))
                 .update();
@@ -37,7 +33,7 @@ public class CarAvailabilityRepository {
         lockDaysInOrder(carTypeId, occupiedDays);
         jdbcClient.sql("""
                         update car_availability
-                        set available_cars = available_cars + 1
+                        set reserved_cars = reserved_cars - 1
                         where car_type_id = :carTypeId
                           and calendar_day between :firstDay and :lastDay
                         """)
@@ -45,22 +41,43 @@ public class CarAvailabilityRepository {
                 .update();
     }
 
-    public void openDayIfMissing(LocalDate calendarDay) {
-        try {
-            jdbcClient.sql("""
-                            insert into car_availability (car_type_id, calendar_day, available_cars)
-                            select car_type.id, cast(:calendarDay as date), car_type.car_count
-                            from car_type
-                            where not exists (
-                                select 1 from car_availability
-                                where car_availability.car_type_id = car_type.id
-                                  and car_availability.calendar_day = cast(:calendarDay as date))
-                            """)
-                    .param("calendarDay", calendarDay)
-                    .update();
-        } catch (DuplicateKeyException dayOpenedByAnotherInstance) {
-            log.debug("Day {} was opened by another instance at the same moment", calendarDay, dayOpenedByAnotherInstance);
-        }
+    @Transactional
+    public void openDayForEveryCarType(LocalDate calendarDay) {
+        lockCarTypesInOrder();
+        jdbcClient.sql("""
+                        insert into car_availability (car_type_id, calendar_day, reserved_cars)
+                        select car_type.id, cast(:calendarDay as date), 0
+                        from car_type
+                        where not exists (
+                            select 1 from car_availability
+                            where car_availability.car_type_id = car_type.id
+                              and car_availability.calendar_day = cast(:calendarDay as date))
+                        """)
+                .param("calendarDay", calendarDay)
+                .update();
+    }
+
+    public int lockOpenDaysAndFindMostCarsReserved(long carTypeId, LocalDate firstDay) {
+        return jdbcClient.sql("""
+                        select reserved_cars from car_availability
+                        where car_type_id = :carTypeId
+                          and calendar_day >= :firstDay
+                        order by calendar_day
+                        for update
+                        """)
+                .param("carTypeId", carTypeId)
+                .param("firstDay", firstDay)
+                .query(Integer.class)
+                .list().stream()
+                .mapToInt(Integer::intValue)
+                .max()
+                .orElse(0);
+    }
+
+    private void lockCarTypesInOrder() {
+        jdbcClient.sql("select id from car_type order by id for update")
+                .query(Long.class)
+                .list();
     }
 
     private void lockDaysInOrder(long carTypeId, OccupiedDays occupiedDays) {

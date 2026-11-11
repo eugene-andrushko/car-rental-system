@@ -35,6 +35,10 @@ public class CarType {
         return name.strip().toUpperCase(Locale.ROOT);
     }
 
+    public void changeCarCount(int newCarCount) {
+        this.carCount = newCarCount;
+    }
+
     public Long id() {
         return id;
     }
