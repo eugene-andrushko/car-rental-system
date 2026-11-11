@@ -30,8 +30,8 @@ The app starts on port 8080 with an in-memory H2 database. To run against Postgr
 
 ## Code
 
-- `fleet`: car types (`CarType`, its repository).
-- `reservation`: `domain` (rules, period, reservation), `application` (reserve and cancel, fleet change, calendar job), `persistence` (JPA for reservations, SQL for the day counters), `web` (controllers and request/response records), `config` (booking limits from `application.yml`).
+- `fleet`: the cars and how many are reserved on each day. `domain` (car type, occupied days), `persistence` (car types with JPA, the day counters with SQL), `application` (fleet size change), `web` (fleet endpoint).
+- `reservation`: customer bookings, which depend on `fleet`. `domain` (rules, period, reservation), `application` (reserve and cancel, the calendar job that opens bookable days), `persistence` (reservations with JPA), `web` (reservation endpoints), `config` (booking limits from `application.yml`).
 - `web.ApiExceptionHandler` maps every error to a status; `config` holds the clock and OpenAPI beans.
 
 ## Seed data

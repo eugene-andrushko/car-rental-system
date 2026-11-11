@@ -1,10 +1,10 @@
-package com.carrental.reservation.application;
+package com.carrental.fleet.application;
 
 import com.carrental.fleet.domain.CarType;
+import com.carrental.fleet.domain.CarsAlreadyReservedException;
 import com.carrental.fleet.domain.UnknownCarTypeException;
+import com.carrental.fleet.persistence.CarAvailabilityRepository;
 import com.carrental.fleet.persistence.CarTypeRepository;
-import com.carrental.reservation.domain.CarsAlreadyReservedException;
-import com.carrental.reservation.persistence.CarAvailabilityRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;

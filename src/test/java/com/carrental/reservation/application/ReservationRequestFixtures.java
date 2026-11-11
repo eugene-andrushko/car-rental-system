@@ -7,35 +7,35 @@ import java.util.UUID;
 
 import static com.carrental.FixedClockConfiguration.NOW;
 
-final class ReservationRequestFixtures {
+public final class ReservationRequestFixtures {
 
-    static final Instant TOMORROW = NOW.plus(Duration.ofDays(1));
-    static final int DEFAULT_DAYS = 3;
+    public static final Instant TOMORROW = NOW.plus(Duration.ofDays(1));
+    public static final int DEFAULT_DAYS = 3;
 
     private ReservationRequestFixtures() {
     }
 
-    static ReservationRequest van() {
+    public static ReservationRequest van() {
         return ofCarType("VAN");
     }
 
-    static ReservationRequest ofCarType(String carTypeName) {
+    public static ReservationRequest ofCarType(String carTypeName) {
         return new ReservationRequest(carTypeName, TOMORROW, DEFAULT_DAYS, generateCustomerId(), generateIdempotencyKey());
     }
 
-    static ReservationRequest withCarType(ReservationRequest request, String carTypeName) {
+    public static ReservationRequest withCarType(ReservationRequest request, String carTypeName) {
         return new ReservationRequest(carTypeName, request.pickUpAt(), request.days(), request.customerId(), request.idempotencyKey());
     }
 
-    static ReservationRequest withPeriod(ReservationRequest request, Instant pickUpAt, int days) {
+    public static ReservationRequest withPeriod(ReservationRequest request, Instant pickUpAt, int days) {
         return new ReservationRequest(request.carTypeName(), pickUpAt, days, request.customerId(), request.idempotencyKey());
     }
 
-    static ReservationRequest withCustomerId(ReservationRequest request, String customerId) {
+    public static ReservationRequest withCustomerId(ReservationRequest request, String customerId) {
         return new ReservationRequest(request.carTypeName(), request.pickUpAt(), request.days(), customerId, request.idempotencyKey());
     }
 
-    static String generateCustomerId() {
+    public static String generateCustomerId() {
         return "customer-" + UUID.randomUUID();
     }
 

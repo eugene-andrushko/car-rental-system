@@ -1,4 +1,4 @@
-package com.carrental.reservation.web;
+package com.carrental.fleet.web;
 
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;

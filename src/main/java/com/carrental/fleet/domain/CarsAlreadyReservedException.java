@@ -1,4 +1,4 @@
-package com.carrental.reservation.domain;
+package com.carrental.fleet.domain;
 
 public class CarsAlreadyReservedException extends RuntimeException {
 

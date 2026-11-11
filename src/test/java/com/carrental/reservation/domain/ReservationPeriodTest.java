@@ -1,5 +1,6 @@
 package com.carrental.reservation.domain;
 
+import com.carrental.fleet.domain.OccupiedDays;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;

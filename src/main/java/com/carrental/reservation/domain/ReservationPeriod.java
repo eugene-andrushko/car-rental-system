@@ -1,5 +1,6 @@
 package com.carrental.reservation.domain;
 
+import com.carrental.fleet.domain.OccupiedDays;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 

@@ -1,9 +1,10 @@
-package com.carrental.reservation.application;
+package com.carrental.fleet.application;
 
 import com.carrental.CarRentalIntegrationTest;
+import com.carrental.fleet.domain.CarsAlreadyReservedException;
 import com.carrental.fleet.domain.UnknownCarTypeException;
 import com.carrental.fleet.persistence.CarTypeRepository;
-import com.carrental.reservation.domain.CarsAlreadyReservedException;
+import com.carrental.reservation.application.ReservationService;
 import com.carrental.reservation.domain.NoCarAvailableException;
 import com.carrental.reservation.domain.Reservation;
 import com.carrental.reservation.domain.ReservationStatus;

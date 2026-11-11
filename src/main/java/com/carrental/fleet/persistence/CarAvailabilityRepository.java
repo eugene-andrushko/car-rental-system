@@ -1,6 +1,6 @@
-package com.carrental.reservation.persistence;
+package com.carrental.fleet.persistence;
 
-import com.carrental.reservation.domain.OccupiedDays;
+import com.carrental.fleet.domain.OccupiedDays;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;

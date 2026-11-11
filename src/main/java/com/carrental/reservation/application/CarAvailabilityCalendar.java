@@ -1,7 +1,7 @@
 package com.carrental.reservation.application;
 
+import com.carrental.fleet.persistence.CarAvailabilityRepository;
 import com.carrental.reservation.domain.ReservationRules;
-import com.carrental.reservation.persistence.CarAvailabilityRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.SmartInitializingSingleton;

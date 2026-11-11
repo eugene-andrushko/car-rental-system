@@ -1,4 +1,4 @@
-package com.carrental.reservation.domain;
+package com.carrental.fleet.domain;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;

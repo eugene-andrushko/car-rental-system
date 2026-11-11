@@ -1,6 +1,6 @@
-package com.carrental.reservation.web;
+package com.carrental.fleet.web;
 
-import com.carrental.reservation.application.FleetService;
+import com.carrental.fleet.application.FleetService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;

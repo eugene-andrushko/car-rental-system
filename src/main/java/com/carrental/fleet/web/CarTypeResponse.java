@@ -1,4 +1,4 @@
-package com.carrental.reservation.web;
+package com.carrental.fleet.web;
 
 import com.carrental.fleet.domain.CarType;
 

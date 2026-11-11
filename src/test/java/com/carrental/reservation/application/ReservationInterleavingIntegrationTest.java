@@ -1,13 +1,14 @@
 package com.carrental.reservation.application;
 
 import com.carrental.CarRentalIntegrationTest;
+import com.carrental.fleet.application.FleetService;
 import com.carrental.fleet.domain.CarType;
-import com.carrental.reservation.domain.CarsAlreadyReservedException;
+import com.carrental.fleet.domain.CarsAlreadyReservedException;
+import com.carrental.fleet.persistence.CarAvailabilityRepository;
 import com.carrental.reservation.domain.KeyClaimedByConcurrentRequestException;
 import com.carrental.reservation.domain.NoCarAvailableException;
 import com.carrental.reservation.domain.Reservation;
 import com.carrental.reservation.domain.ReservationStatus;
-import com.carrental.reservation.persistence.CarAvailabilityRepository;
 import com.carrental.reservation.persistence.ReservationRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;

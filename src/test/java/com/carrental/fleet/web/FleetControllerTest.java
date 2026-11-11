@@ -1,9 +1,9 @@
-package com.carrental.reservation.web;
+package com.carrental.fleet.web;
 
+import com.carrental.fleet.application.FleetService;
 import com.carrental.fleet.domain.CarType;
+import com.carrental.fleet.domain.CarsAlreadyReservedException;
 import com.carrental.fleet.domain.UnknownCarTypeException;
-import com.carrental.reservation.application.FleetService;
-import com.carrental.reservation.domain.CarsAlreadyReservedException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;

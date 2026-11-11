@@ -1,7 +1,7 @@
 package com.carrental.web;
 
+import com.carrental.fleet.domain.CarsAlreadyReservedException;
 import com.carrental.fleet.domain.UnknownCarTypeException;
-import com.carrental.reservation.domain.CarsAlreadyReservedException;
 import com.carrental.reservation.domain.IdempotencyKeyReusedException;
 import com.carrental.reservation.domain.InvalidReservationException;
 import com.carrental.reservation.domain.KeyClaimedByConcurrentRequestException;

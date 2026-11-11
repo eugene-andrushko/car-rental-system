@@ -1,18 +1,18 @@
 package com.carrental.reservation.application;
 
 import com.carrental.fleet.domain.CarType;
+import com.carrental.fleet.domain.OccupiedDays;
 import com.carrental.fleet.domain.UnknownCarTypeException;
+import com.carrental.fleet.persistence.CarAvailabilityRepository;
 import com.carrental.fleet.persistence.CarTypeRepository;
 import com.carrental.reservation.domain.IdempotencyKeyReusedException;
 import com.carrental.reservation.domain.KeyClaimedByConcurrentRequestException;
 import com.carrental.reservation.domain.NoCarAvailableException;
-import com.carrental.reservation.domain.OccupiedDays;
-import com.carrental.reservation.domain.Reservation;
 import com.carrental.reservation.domain.PickUpTimePassedException;
+import com.carrental.reservation.domain.Reservation;
 import com.carrental.reservation.domain.ReservationNotFoundException;
 import com.carrental.reservation.domain.ReservationPeriod;
 import com.carrental.reservation.domain.ReservationRules;
-import com.carrental.reservation.persistence.CarAvailabilityRepository;
 import com.carrental.reservation.persistence.ReservationRepository;
 import org.hibernate.exception.ConstraintViolationException;
 import org.slf4j.Logger;
